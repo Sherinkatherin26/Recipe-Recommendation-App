@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../core/db/sqlite_db.dart';
+import '../../core/api_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   bool _isAuthenticated = false;
@@ -19,22 +20,27 @@ class AuthProvider extends ChangeNotifier {
     final displayName = name.isEmpty ? (email.contains('@') ? email.split('@').first : 'User') : name;
     final normalized = email.trim();
     
-    // Try to register the user in the database
-    final added = await LocalDatabase.instance.addUser(displayName, normalized, password);
-    if (!added) return 'Account already exists for this email';
-    
-    // Set authenticated state
-    _isAuthenticated = true;
-    _userEmail = normalized;
-    _userName = displayName;
-    debugPrint('AuthProvider.signup: authenticated user=$normalized name=$displayName');
-    notifyListeners();
-    
-    // Record signup activity
     try {
-      await LocalDatabase.instance.addActivity(normalized, 'signup');
-    } catch (_) {}
-    return null;
+      await ApiService.instance.signup(displayName, normalized, password);
+      // backend returned token and user info
+      _isAuthenticated = true;
+      _userEmail = normalized;
+      _userName = displayName;
+      notifyListeners();
+      return null;
+    } catch (_) {
+      // fallback to local DB if backend not reachable
+      final added = await LocalDatabase.instance.addUser(displayName, normalized, password);
+      if (!added) return 'Account already exists for this email';
+      _isAuthenticated = true;
+      _userEmail = normalized;
+      _userName = displayName;
+      notifyListeners();
+      try {
+        await LocalDatabase.instance.addActivity(normalized, 'signup');
+      } catch (_) {}
+      return null;
+    }
   }
 
   // Login: verify email/password against registered users in database
@@ -43,33 +49,31 @@ class AuthProvider extends ChangeNotifier {
     if (email.isEmpty || password.isEmpty) return 'Missing email or password';
 
     final normalized = email.trim();
-    
-    // Look up user in database
-    final user = await LocalDatabase.instance.getUserByEmail(normalized);
-    if (user == null) {
-      // Account not found — prompt user to sign up
-      return 'Account does not exist';
-    }
-
-    // Verify password
-    if (password != user['password']) {
-      return 'Incorrect password';
-    }
-
-    // Password matches — set authenticated state
-    _isAuthenticated = true;
-    _userEmail = normalized;
-    _userName = user['name'] ?? 'User';
-    debugPrint('AuthProvider.login: set authenticated for $normalized name=${_userName}');
-    
-    // Record login activity
     try {
-      await LocalDatabase.instance.addActivity(normalized, 'login');
-    } catch (_) {}
-    
-    notifyListeners();
-    debugPrint('AuthProvider.login: notifyListeners called');
-    return null;
+      final data = await ApiService.instance.login(normalized, password);
+      // store token is done by ApiService
+      _isAuthenticated = true;
+      _userEmail = normalized;
+      _userName = data['name'] ?? normalized.split('@').first;
+      try {
+        await LocalDatabase.instance.addActivity(normalized, 'login');
+      } catch (_) {}
+      notifyListeners();
+      return null;
+    } catch (_) {
+      // fallback to local DB
+      final user = await LocalDatabase.instance.getUserByEmail(normalized);
+      if (user == null) return 'Account does not exist';
+      if (password != user['password']) return 'Incorrect password';
+      _isAuthenticated = true;
+      _userEmail = normalized;
+      _userName = user['name'] ?? 'User';
+      try {
+        await LocalDatabase.instance.addActivity(normalized, 'login');
+      } catch (_) {}
+      notifyListeners();
+      return null;
+    }
   }
 
   // Mock logout
@@ -81,6 +85,8 @@ class AuthProvider extends ChangeNotifier {
       _userEmail = null;
       _userName = null;
       debugPrint('AuthProvider.logout: cleared authentication');
+      // remove token from ApiService storage
+      await ApiService.instance.setToken(null);
       notifyListeners();
     } catch (e) {
       // Handle logout error

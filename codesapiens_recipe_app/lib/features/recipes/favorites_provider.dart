@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../core/db/sqlite_db.dart';
+import '../../core/api_service.dart';
 
 class FavoritesProvider extends ChangeNotifier {
   final Set<String> _favoriteIds = {};
@@ -23,6 +24,22 @@ class FavoritesProvider extends ChangeNotifier {
   Future<void> loadFavoritesForUser(String email) async {
     try {
       _favoriteIds.clear();
+      // Try server-side favorites first (if authenticated/token present)
+      try {
+        final remote = await ApiService.instance.getFavorites();
+        if (remote.isNotEmpty) {
+          _favoriteIds.addAll(remote);
+          notifyListeners();
+          // also ensure local DB mirrors remote
+          for (final id in remote) {
+            await LocalDatabase.instance.addUserFavorite(email, id);
+          }
+          return;
+        }
+      } catch (_) {
+        // remote failed - fallback to local DB
+      }
+
       final ids = await LocalDatabase.instance.getUserFavorites(email);
       _favoriteIds.addAll(ids);
       notifyListeners();
@@ -51,38 +68,49 @@ class FavoritesProvider extends ChangeNotifier {
   bool isFavorite(String recipeId) => _favoriteIds.contains(recipeId);
 
   /// Toggle favorite state. Optionally provide `userEmail` to record activity.
-  /// This keeps the same (synchronous) signature so callers don't need to change.
-  /// DB writes are fired and not awaited here; they are fast local operations.
-  /// If you prefer awaiting DB writes, change this to return Future<void> and
-  /// await LocalDatabase calls.
-  void toggleFavorite(String recipeId, {String? userEmail}) {
+  /// This method now awaits local DB writes to ensure persistence before
+  /// operations like logout occur.
+  Future<void> toggleFavorite(String recipeId, {String? userEmail}) async {
     final nowFavorite = !_favoriteIds.contains(recipeId);
     if (!nowFavorite) {
       _favoriteIds.remove(recipeId);
-      if (userEmail == null) {
-        LocalDatabase.instance.removeFavorite(recipeId);
-      } else {
-        LocalDatabase.instance.removeUserFavorite(userEmail, recipeId);
-      }
-      // record activity
-      if (userEmail != null) {
-        try {
-          LocalDatabase.instance
-              .addActivity(userEmail, 'removed_favorite:$recipeId');
-        } catch (_) {}
+      try {
+        // Try remote sync first when logged in
+        if (userEmail != null) {
+          try {
+            await ApiService.instance.removeFavorite(recipeId);
+          } catch (_) {}
+        }
+        if (userEmail == null) {
+          await LocalDatabase.instance.removeFavorite(recipeId);
+        } else {
+          await LocalDatabase.instance.removeUserFavorite(userEmail, recipeId);
+        }
+        if (userEmail != null) {
+          await LocalDatabase.instance.addActivity(userEmail, 'removed_favorite:$recipeId');
+        }
+      } catch (_) {
+        // ignore DB errors but keep in-memory state updated
       }
     } else {
       _favoriteIds.add(recipeId);
-      if (userEmail == null) {
-        LocalDatabase.instance.addFavorite(recipeId);
-      } else {
-        LocalDatabase.instance.addUserFavorite(userEmail, recipeId);
-      }
-      if (userEmail != null) {
-        try {
-          LocalDatabase.instance
-              .addActivity(userEmail, 'added_favorite:$recipeId');
-        } catch (_) {}
+      try {
+        // Try remote sync first when logged in
+        if (userEmail != null) {
+          try {
+            await ApiService.instance.addFavorite(recipeId);
+          } catch (_) {}
+        }
+        if (userEmail == null) {
+          await LocalDatabase.instance.addFavorite(recipeId);
+        } else {
+          await LocalDatabase.instance.addUserFavorite(userEmail, recipeId);
+        }
+        if (userEmail != null) {
+          await LocalDatabase.instance.addActivity(userEmail, 'added_favorite:$recipeId');
+        }
+      } catch (_) {
+        // ignore DB errors
       }
     }
     notifyListeners();

@@ -1,19 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../auth/auth_provider.dart';
+import '../../core/db/sqlite_db.dart';
 import '../../core/theme.dart';
 import '../recipes/favorites_provider.dart';
 import '../recipes/recipe.dart';
 import '../recipes/recipe_image.dart';
 
-class RecipeDetailPage extends StatelessWidget {
+class RecipeDetailPage extends StatefulWidget {
   const RecipeDetailPage({super.key, required this.recipe});
 
   final Recipe recipe;
 
   @override
+  State<RecipeDetailPage> createState() => _RecipeDetailPageState();
+}
+
+class _RecipeDetailPageState extends State<RecipeDetailPage> {
+  bool _completed = false;
+
+  Future<void> _loadProgress() async {
+    try {
+      final userEmail =
+          Provider.of<AuthProvider>(context, listen: false).userEmail;
+      if (userEmail != null) {
+        final progress = await LocalDatabase.instance
+            .getUserProgressForRecipe(userEmail, widget.recipe.id);
+        if (progress != null && progress['status'] == 'completed') {
+          setState(() => _completed = true);
+        }
+        // also record a 'viewed' activity/progress
+        await LocalDatabase.instance
+            .setUserProgress(userEmail, widget.recipe.id, 'viewed');
+      }
+    } catch (_) {}
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // load progress after first frame so Provider is available
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadProgress());
+  }
+
+  @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final recipe = widget.recipe;
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
@@ -23,6 +56,36 @@ class RecipeDetailPage extends StatelessWidget {
         ),
         title: const Text('Back to Recipes'),
         actions: [
+          // Completed toggle
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: IconButton(
+              tooltip: 'Mark completed',
+              icon: Icon(
+                  _completed ? Icons.check_circle : Icons.check_circle_outline,
+                  color: _completed ? Colors.greenAccent : Colors.white),
+              onPressed: () async {
+                final userEmail =
+                    Provider.of<AuthProvider>(context, listen: false).userEmail;
+                if (userEmail == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Please login to save progress')));
+                  return;
+                }
+                final nowCompleted = !_completed;
+                setState(() => _completed = nowCompleted);
+                try {
+                  await LocalDatabase.instance.setUserProgress(userEmail,
+                      recipe.id, nowCompleted ? 'completed' : 'in_progress');
+                } catch (_) {}
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(nowCompleted
+                        ? 'Marked as completed'
+                        : 'Marked as in progress'),
+                    duration: const Duration(seconds: 1)));
+              },
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: Consumer<FavoritesProvider>(
@@ -30,11 +93,11 @@ class RecipeDetailPage extends StatelessWidget {
                 final isFavorite = favoritesProvider.isFavorite(recipe.id);
                 return InkWell(
                   customBorder: const CircleBorder(),
-                  onTap: () {
+                  onTap: () async {
                     final userEmail =
                         Provider.of<AuthProvider>(context, listen: false)
                             .userEmail;
-                    favoritesProvider.toggleFavorite(recipe.id,
+                    await favoritesProvider.toggleFavorite(recipe.id,
                         userEmail: userEmail);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(

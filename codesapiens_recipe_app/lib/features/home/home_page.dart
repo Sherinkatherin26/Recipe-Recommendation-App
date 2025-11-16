@@ -325,12 +325,12 @@ class _RecipeCard extends StatelessWidget {
                           color: Colors.transparent,
                           child: InkWell(
                             customBorder: const CircleBorder(),
-                            onTap: () {
+                            onTap: () async {
                               final userEmail = Provider.of<AuthProvider>(
                                       context,
                                       listen: false)
                                   .userEmail;
-                              favoritesProvider.toggleFavorite(recipe.id,
+                              await favoritesProvider.toggleFavorite(recipe.id,
                                   userEmail: userEmail);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(

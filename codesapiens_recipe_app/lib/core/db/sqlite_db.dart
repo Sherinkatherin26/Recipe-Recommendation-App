@@ -39,7 +39,8 @@ class LocalDatabase {
         version: 3,
         onCreate: _createDB,
         onUpgrade: (db, oldVersion, newVersion) async {
-          debugPrint('LocalDatabase: upgrading from version $oldVersion to $newVersion');
+          debugPrint(
+              'LocalDatabase: upgrading from version $oldVersion to $newVersion');
           if (oldVersion < 2) {
             // Add activities table if upgrading from version 1
             try {
@@ -52,7 +53,8 @@ class LocalDatabase {
                 )
               ''');
             } catch (e) {
-              debugPrint('LocalDatabase: failed to create activities table: $e');
+              debugPrint(
+                  'LocalDatabase: failed to create activities table: $e');
             }
           }
           if (oldVersion < 3) {
@@ -116,6 +118,17 @@ class LocalDatabase {
         PRIMARY KEY(follower, followee)
       )
     ''');
+    // user progress table: stores per-user recipe progress (viewed, in_progress, completed)
+    await db.execute('''
+      CREATE TABLE user_progress(
+        email TEXT,
+        id TEXT,
+        status TEXT,
+        position INTEGER,
+        timestamp INTEGER,
+        PRIMARY KEY(email, id)
+      )
+    ''');
   }
 
   Future<List<String>> getFavorites() async {
@@ -143,7 +156,8 @@ class LocalDatabase {
       return list.map((e) => e as String).toList();
     }
     final db = await database;
-    final res = await db.query('user_favorites', where: 'email = ?', whereArgs: [normalized]);
+    final res = await db
+        .query('user_favorites', where: 'email = ?', whereArgs: [normalized]);
     return res.map((r) => r['id'] as String).toList();
   }
 
@@ -161,7 +175,8 @@ class LocalDatabase {
       return;
     }
     final db = await database;
-    await db.insert('user_favorites', {'email': normalized, 'id': id}, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert('user_favorites', {'email': normalized, 'id': id},
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> removeUserFavorite(String email, String id) async {
@@ -176,7 +191,8 @@ class LocalDatabase {
       return;
     }
     final db = await database;
-    await db.delete('user_favorites', where: 'email = ? AND id = ?', whereArgs: [normalized, id]);
+    await db.delete('user_favorites',
+        where: 'email = ? AND id = ?', whereArgs: [normalized, id]);
   }
 
   Future<void> addFavorite(String id) async {
@@ -210,7 +226,8 @@ class LocalDatabase {
       return;
     }
     final db = await database;
-    await db.insert('followers', {'follower': f, 'followee': t}, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert('followers', {'follower': f, 'followee': t},
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> removeFollower(String follower, String followee) async {
@@ -226,7 +243,8 @@ class LocalDatabase {
       return;
     }
     final db = await database;
-    await db.delete('followers', where: 'follower = ? AND followee = ?', whereArgs: [f, t]);
+    await db.delete('followers',
+        where: 'follower = ? AND followee = ?', whereArgs: [f, t]);
   }
 
   Future<List<String>> getFollowing(String follower) async {
@@ -240,7 +258,8 @@ class LocalDatabase {
       return list.map((e) => e as String).toList();
     }
     final db = await database;
-    final res = await db.query('followers', where: 'follower = ?', whereArgs: [f]);
+    final res =
+        await db.query('followers', where: 'follower = ?', whereArgs: [f]);
     return res.map((r) => r['followee'] as String).toList();
   }
 
@@ -249,7 +268,8 @@ class LocalDatabase {
     if (kIsWeb) {
       // For web fallback, gather all keys and collect followers who list followee
       final prefs = await SharedPreferences.getInstance();
-      final keys = prefs.getKeys().where((k) => k.startsWith('codesapiens_followers_'));
+      final keys =
+          prefs.getKeys().where((k) => k.startsWith('codesapiens_followers_'));
       final List<String> out = [];
       for (final k in keys) {
         final raw = prefs.getString(k);
@@ -262,7 +282,8 @@ class LocalDatabase {
       return out;
     }
     final db = await database;
-    final res = await db.query('followers', where: 'followee = ?', whereArgs: [t]);
+    final res =
+        await db.query('followers', where: 'followee = ?', whereArgs: [t]);
     return res.map((r) => r['follower'] as String).toList();
   }
 
@@ -340,6 +361,110 @@ class LocalDatabase {
     }
   }
 
+  // --- User progress (per-recipe) ---
+  static const _kWebUserProgressPrefix = 'codesapiens_user_progress_';
+
+  Future<Map<String, dynamic>?> getUserProgressForRecipe(
+      String email, String id) async {
+    final normalized = _normalizeEmail(email);
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      final key = '$_kWebUserProgressPrefix$normalized';
+      final raw = prefs.getString(key);
+      if (raw == null) return null;
+      final Map<String, dynamic> map = jsonDecode(raw) as Map<String, dynamic>;
+      final item = map[id];
+      if (item == null) return null;
+      return item as Map<String, dynamic>;
+    }
+    final db = await database;
+    final res = await db.query('user_progress',
+        where: 'email = ? AND id = ?', whereArgs: [normalized, id], limit: 1);
+    if (res.isEmpty) return null;
+    final row = res.first;
+    return {
+      'status': row['status'] as String?,
+      'position': row['position'] as int?,
+      'timestamp': row['timestamp'] as int?
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> getUserProgress(String email) async {
+    final normalized = _normalizeEmail(email);
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      final key = '$_kWebUserProgressPrefix$normalized';
+      final raw = prefs.getString(key);
+      if (raw == null) return [];
+      final Map<String, dynamic> map = jsonDecode(raw) as Map<String, dynamic>;
+      final out = <Map<String, dynamic>>[];
+      map.forEach((k, v) {
+        out.add({
+          'id': k,
+          'status': v['status'],
+          'position': v['position'],
+          'timestamp': v['timestamp']
+        });
+      });
+      return out;
+    }
+    final db = await database;
+    final res = await db
+        .query('user_progress', where: 'email = ?', whereArgs: [normalized]);
+    return res
+        .map((r) => {
+              'id': r['id'],
+              'status': r['status'],
+              'position': r['position'],
+              'timestamp': r['timestamp']
+            })
+        .toList();
+  }
+
+  Future<void> setUserProgress(String email, String id, String status,
+      {int? position}) async {
+    final normalized = _normalizeEmail(email);
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      final key = '$_kWebUserProgressPrefix$normalized';
+      final raw = prefs.getString(key);
+      final Map<String, dynamic> map =
+          raw == null ? {} : jsonDecode(raw) as Map<String, dynamic>;
+      map[id] = {'status': status, 'position': position ?? 0, 'timestamp': ts};
+      await prefs.setString(key, jsonEncode(map));
+      return;
+    }
+    final db = await database;
+    await db.insert(
+        'user_progress',
+        {
+          'email': normalized,
+          'id': id,
+          'status': status,
+          'position': position ?? 0,
+          'timestamp': ts
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> removeUserProgress(String email, String id) async {
+    final normalized = _normalizeEmail(email);
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      final key = '$_kWebUserProgressPrefix$normalized';
+      final raw = prefs.getString(key);
+      if (raw == null) return;
+      final Map<String, dynamic> map = jsonDecode(raw) as Map<String, dynamic>;
+      map.remove(id);
+      await prefs.setString(key, jsonEncode(map));
+      return;
+    }
+    final db = await database;
+    await db.delete('user_progress',
+        where: 'email = ? AND id = ?', whereArgs: [normalized, id]);
+  }
+
   // --- Activities ---
   Future<void> addActivity(String email, String activity) async {
     final normalized = _normalizeEmail(email);
@@ -353,8 +478,8 @@ class LocalDatabase {
       return;
     }
     final db = await database;
-    await db.insert(
-        'activities', {'email': normalized, 'activity': activity, 'timestamp': ts});
+    await db.insert('activities',
+        {'email': normalized, 'activity': activity, 'timestamp': ts});
   }
 
   Future<List<Map<String, dynamic>>> getActivities(String email) async {
@@ -365,14 +490,14 @@ class LocalDatabase {
       if (raw == null) return [];
       final List<dynamic> list = jsonDecode(raw);
       return list
-        .cast<Map<String, dynamic>>()
-        .where((e) => e['email'] == normalized)
-        .map((e) => {'activity': e['activity'], 'timestamp': e['timestamp']})
-        .toList();
+          .cast<Map<String, dynamic>>()
+          .where((e) => e['email'] == normalized)
+          .map((e) => {'activity': e['activity'], 'timestamp': e['timestamp']})
+          .toList();
     }
     final db = await database;
     final res = await db.query('activities',
-      where: 'email = ?', whereArgs: [normalized], orderBy: 'timestamp DESC');
+        where: 'email = ?', whereArgs: [normalized], orderBy: 'timestamp DESC');
     return res
         .map((r) => {'activity': r['activity'], 'timestamp': r['timestamp']})
         .toList();

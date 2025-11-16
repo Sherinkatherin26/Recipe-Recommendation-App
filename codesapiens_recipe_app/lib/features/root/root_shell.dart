@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../home/home_page.dart';
 import '../search/search_page.dart';
 import '../favourites/favourites_page.dart';
 import '../profile/profile_page.dart';
+import '../recipes/favorites_provider.dart';
+import '../activities/activities_provider.dart';
+import '../auth/auth_provider.dart';
 
 class RootShell extends StatefulWidget {
   const RootShell({super.key});
@@ -21,6 +25,27 @@ class _RootShellState extends State<RootShell> {
     FavouritesPage(),
     ProfilePage(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // After the first frame, load user-scoped data if authenticated
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final auth = context.read<AuthProvider>();
+      final favs = context.read<FavoritesProvider>();
+      final activities = context.read<ActivitiesProvider>();
+      if (auth.isAuthenticated && auth.userEmail != null) {
+        try {
+          await favs.loadFavoritesForUser(auth.userEmail!);
+          await favs.syncFavoritesFromFollowing(auth.userEmail!);
+        } catch (_) {}
+        try {
+          await activities.loadActivitiesForUser(auth.userEmail!);
+          await activities.syncActivitiesFromFollowing(auth.userEmail!);
+        } catch (_) {}
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,4 +74,3 @@ class _RootShellState extends State<RootShell> {
     );
   }
 }
-
