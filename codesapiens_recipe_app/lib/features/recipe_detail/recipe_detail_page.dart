@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../auth/auth_provider.dart';
 import '../../core/db/sqlite_db.dart';
+import '../../core/api_service.dart';
 import '../../core/theme.dart';
 import '../recipes/favorites_provider.dart';
 import '../recipes/recipe.dart';
@@ -24,14 +25,28 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> {
       final userEmail =
           Provider.of<AuthProvider>(context, listen: false).userEmail;
       if (userEmail != null) {
-        final progress = await LocalDatabase.instance
-            .getUserProgressForRecipe(userEmail, widget.recipe.id);
-        if (progress != null && progress['status'] == 'completed') {
-          setState(() => _completed = true);
+        // Try backend first
+        try {
+          final allProgress = await ApiService.instance.getProgress();
+          final progress = allProgress.firstWhere(
+            (p) => p['id'] == widget.recipe.id,
+            orElse: () => <String, dynamic>{},
+          );
+          if (progress.isNotEmpty && progress['status'] == 'completed') {
+            setState(() => _completed = true);
+          }
+          // Record 'viewed' progress
+          await ApiService.instance.setProgress(widget.recipe.id, 'viewed');
+        } catch (_) {
+          // Fallback to local DB
+          final progress = await LocalDatabase.instance
+              .getUserProgressForRecipe(userEmail, widget.recipe.id);
+          if (progress != null && progress['status'] == 'completed') {
+            setState(() => _completed = true);
+          }
+          await LocalDatabase.instance
+              .setUserProgress(userEmail, widget.recipe.id, 'viewed');
         }
-        // also record a 'viewed' activity/progress
-        await LocalDatabase.instance
-            .setUserProgress(userEmail, widget.recipe.id, 'viewed');
       }
     } catch (_) {}
   }
@@ -39,8 +54,17 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> {
   @override
   void initState() {
     super.initState();
-    // load progress after first frame so Provider is available
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadProgress());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadProgress();
+      final userEmail =
+          Provider.of<AuthProvider>(context, listen: false).userEmail;
+      if (userEmail != null) {
+        try {
+          await ApiService.instance
+              .logActivity('view_recipe:${widget.recipe.id}');
+        } catch (_) {}
+      }
+    });
   }
 
   @override
@@ -75,14 +99,28 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> {
                 final nowCompleted = !_completed;
                 setState(() => _completed = nowCompleted);
                 try {
-                  await LocalDatabase.instance.setUserProgress(userEmail,
-                      recipe.id, nowCompleted ? 'completed' : 'in_progress');
+                  // Try backend first
+                  try {
+                    await ApiService.instance.setProgress(
+                        recipe.id, nowCompleted ? 'completed' : 'in_progress');
+                  } catch (_) {
+                    // Fallback to local DB
+                    await LocalDatabase.instance.setUserProgress(userEmail,
+                        recipe.id, nowCompleted ? 'completed' : 'in_progress');
+                  }
                 } catch (_) {}
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(nowCompleted
-                        ? 'Marked as completed'
-                        : 'Marked as in progress'),
-                    duration: const Duration(seconds: 1)));
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        nowCompleted
+                            ? 'Marked as completed'
+                            : 'Marked as in progress',
+                      ),
+                      duration: const Duration(seconds: 1),
+                    ),
+                  );
+                }
               },
             ),
           ),

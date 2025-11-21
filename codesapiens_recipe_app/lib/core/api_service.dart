@@ -75,16 +75,18 @@ class ApiService {
     final url = Uri.parse('$baseUrl/favorites');
     final res = await http.post(url,
         body: jsonEncode({'id': id}), headers: _authHeaders(token));
-    if (res.statusCode < 200 || res.statusCode >= 300)
+    if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('addFavorite failed: ${res.body}');
+    }
   }
 
   Future<void> removeFavorite(String id) async {
     final token = await _getToken();
     final url = Uri.parse('$baseUrl/favorites/$id');
     final res = await http.delete(url, headers: _authHeaders(token));
-    if (res.statusCode < 200 || res.statusCode >= 300)
+    if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('removeFavorite failed: ${res.body}');
+    }
   }
 
   Future<List<Map<String, dynamic>>> getProgress() async {
@@ -104,7 +106,80 @@ class ApiService {
     final res = await http.post(url,
         body: jsonEncode({'id': id, 'status': status, 'position': position}),
         headers: _authHeaders(token));
-    if (res.statusCode < 200 || res.statusCode >= 300)
+    if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('setProgress failed: ${res.body}');
+    }
+  }
+
+  Future<void> deleteProgress(String id) async {
+    final token = await _getToken();
+    final url = Uri.parse('$baseUrl/progress/$id');
+    final res = await http.delete(url, headers: _authHeaders(token));
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception('deleteProgress failed: ${res.body}');
+    }
+  }
+
+  Future<Map<String, dynamic>> getMe() async {
+    final token = await _getToken();
+    final url = Uri.parse('$baseUrl/me');
+    final res = await http.get(url, headers: _authHeaders(token));
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return data;
+    }
+    throw Exception('getMe failed: ${res.body}');
+  }
+
+  Future<List<Map<String, dynamic>>> getActivities({int limit = 100}) async {
+    final token = await _getToken();
+    final url = Uri.parse('$baseUrl/activities?limit=$limit');
+    final res = await http.get(url, headers: _authHeaders(token));
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final data = jsonDecode(res.body) as List<dynamic>;
+      return data.cast<Map<String, dynamic>>();
+    }
+    throw Exception('getActivities failed: \\${res.body}');
+  }
+
+  Future<void> addActivity(String activity, {int? timestamp}) async {
+    final token = await _getToken();
+    final url = Uri.parse('$baseUrl/activities');
+    final body = <String, dynamic>{'activity': activity};
+    if (timestamp != null) {
+      body['timestamp'] = timestamp;
+    }
+    final res = await http.post(url,
+        body: jsonEncode(body), headers: _authHeaders(token));
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception('addActivity failed: ${res.body}');
+    }
+  }
+
+  Future<void> logActivity(String activity, {int? timestamp}) async {
+    final token = await _getToken();
+    final url = Uri.parse('$baseUrl/activities');
+    final body = <String, dynamic>{'activity': activity};
+    if (timestamp != null) {
+      body['timestamp'] = timestamp;
+    }
+    final res = await http.post(url,
+        body: jsonEncode(body), headers: _authHeaders(token));
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception('logActivity failed: \\${res.body}');
+    }
+  }
+
+  // Validate token: checks if the stored token is still valid
+  Future<bool> validateToken() async {
+    final token = await _getToken();
+    if (token == null) return false;
+
+    final url = Uri.parse('$baseUrl/validate-token');
+    final res = await http.get(url, headers: _authHeaders(token));
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      return true;
+    }
+    return false;
   }
 }

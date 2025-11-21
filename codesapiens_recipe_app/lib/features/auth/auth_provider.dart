@@ -11,15 +11,21 @@ class AuthProvider extends ChangeNotifier {
   String? get userEmail => _userEmail;
   String? get userName => _userName;
 
+  AuthProvider() {
+    _restoreSession();
+  }
+
   // Signup: accept any email and register it in the database
   // Returns null on success, or an error message string on failure.
   Future<String?> signup(String name, String email, String password) async {
     // basic validation: email and password required; name optional (use email prefix if empty)
     if (email.isEmpty || password.isEmpty) return 'Missing email or password';
-    
-    final displayName = name.isEmpty ? (email.contains('@') ? email.split('@').first : 'User') : name;
+
+    final displayName = name.isEmpty
+        ? (email.contains('@') ? email.split('@').first : 'User')
+        : name;
     final normalized = email.trim();
-    
+
     try {
       await ApiService.instance.signup(displayName, normalized, password);
       // backend returned token and user info
@@ -28,9 +34,14 @@ class AuthProvider extends ChangeNotifier {
       _userName = displayName;
       notifyListeners();
       return null;
-    } catch (_) {
+    } catch (e) {
+      // Handle specific exception for duplicate email
+      if (e.toString().contains('User with this email already exists')) {
+        return 'This email is already registered. Please use a different email.';
+      }
       // fallback to local DB if backend not reachable
-      final added = await LocalDatabase.instance.addUser(displayName, normalized, password);
+      final added = await LocalDatabase.instance
+          .addUser(displayName, normalized, password);
       if (!added) return 'Account already exists for this email';
       _isAuthenticated = true;
       _userEmail = normalized;
@@ -62,18 +73,43 @@ class AuthProvider extends ChangeNotifier {
       return null;
     } catch (_) {
       // fallback to local DB
-      final user = await LocalDatabase.instance.getUserByEmail(normalized);
-      if (user == null) return 'Account does not exist';
-      if (password != user['password']) return 'Incorrect password';
-      _isAuthenticated = true;
-      _userEmail = normalized;
-      _userName = user['name'] ?? 'User';
       try {
-        await LocalDatabase.instance.addActivity(normalized, 'login');
-      } catch (_) {}
-      notifyListeners();
-      return null;
+        final user = await LocalDatabase.instance.getUserByEmail(normalized);
+        if (user == null) return 'Account does not exist';
+        if (password != user['password']) return 'Incorrect password';
+        _isAuthenticated = true;
+        _userEmail = normalized;
+        _userName = user['name'] ?? 'User';
+        try {
+          await LocalDatabase.instance.addActivity(normalized, 'login');
+        } catch (_) {}
+        notifyListeners();
+        return null;
+      } catch (e) {
+        return 'Error during login: ${e.toString()}';
+      }
     }
+  }
+
+  // Validate token: checks if the stored token is still valid
+  Future<bool> validateToken() async {
+    try {
+      final isValid = await ApiService.instance.validateToken();
+      _isAuthenticated = isValid;
+      if (!isValid) {
+        _userEmail = null;
+        _userName = null;
+      }
+      notifyListeners();
+      return isValid;
+    } catch (e) {
+      debugPrint('AuthProvider.validateToken: Failed to validate token: $e');
+      return false;
+    }
+  }
+
+  Future<void> _restoreSession() async {
+    await validateToken();
   }
 
   // Mock logout

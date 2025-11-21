@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../core/db/sqlite_db.dart';
+import '../../core/api_service.dart';
 
 class ActivitiesProvider extends ChangeNotifier {
   final List<Map<String, dynamic>> _activities = [];
@@ -9,6 +10,32 @@ class ActivitiesProvider extends ChangeNotifier {
   Future<void> loadActivitiesForUser(String email) async {
     try {
       _activities.clear();
+      // Always try backend first - even if empty, backend is the source of truth
+      try {
+        final remote = await ApiService.instance.getActivities();
+        // Annotate activities with the user's email for consistent items
+        final normalized = email.trim().toLowerCase();
+        for (final r in remote) {
+          _activities.add({
+            'email': normalized,
+            'activity': r['activity'] as String,
+            'timestamp': r['timestamp'] as int
+          });
+        }
+        notifyListeners();
+        // Also sync to local DB for offline access (but backend is source of truth)
+        for (final r in remote) {
+          try {
+            await LocalDatabase.instance.addActivity(
+                email, r['activity'] as String);
+          } catch (_) {}
+        }
+        return; // Backend succeeded, use it (even if empty)
+      } catch (_) {
+        // Backend failed, fallback to local DB
+      }
+      
+      // Fallback to local DB only if backend is unavailable
       final rows = await LocalDatabase.instance.getActivities(email);
       // Annotate own activities with the user's email for consistent items
       final normalized = email.trim().toLowerCase();
@@ -55,6 +82,40 @@ class ActivitiesProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('ActivitiesProvider.syncActivitiesFromFollowing error: $e');
+    }
+  }
+
+  /// Sync local activities to backend before logout
+  Future<void> syncLocalActivitiesToBackend(String email) async {
+    try {
+      // Get local activities that might not be in backend
+      final localActivities = await LocalDatabase.instance.getActivities(email);
+      
+      // Get backend activities to check what's already there
+      try {
+        final backendActivities = await ApiService.instance.getActivities();
+        final backendSet = backendActivities.map((a) => 
+          '${a['activity']}_${a['timestamp']}').toSet();
+        
+        // Upload local activities that aren't in backend
+        for (final local in localActivities) {
+          final key = '${local['activity']}_${local['timestamp']}';
+          if (!backendSet.contains(key)) {
+            try {
+              await ApiService.instance.addActivity(
+                local['activity'] as String,
+                timestamp: local['timestamp'] as int
+              );
+            } catch (_) {
+              // Continue with other activities if one fails
+            }
+          }
+        }
+      } catch (_) {
+        // Backend not available, activities will remain in local DB
+      }
+    } catch (e) {
+      debugPrint('ActivitiesProvider.syncLocalActivitiesToBackend error: $e');
     }
   }
 

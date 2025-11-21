@@ -4,6 +4,9 @@ import 'auth_provider.dart';
 import '../root/root_shell.dart';
 import '../recipes/favorites_provider.dart';
 import '../activities/activities_provider.dart';
+import 'package:logging/logging.dart';
+
+final _logger = Logger('AuthScreen');
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -83,12 +86,13 @@ class _AuthScreenState extends State<AuthScreen> {
 
       if (error == null && mounted) {
         // Success: AuthenticationWrapper will rebuild and show RootShell
-        print(
+        _logger.info(
             'Login/Signup successful. AuthProvider.isAuthenticated = ${authProvider.isAuthenticated}');
         // Load and sync user-specific favorites so UI shows correct state
         try {
           final favProvider = context.read<FavoritesProvider>();
-          final userEmail = authProvider.userEmail ?? _emailController.text.trim();
+          final userEmail =
+              authProvider.userEmail ?? _emailController.text.trim();
           await favProvider.loadFavoritesForUser(userEmail);
           await favProvider.syncFavoritesFromFollowing(userEmail);
           // Load recent activities for the authenticated user and merge following
@@ -248,8 +252,9 @@ class _AuthScreenState extends State<AuthScreen> {
                     // Password is optional for signup; if omitted we'll generate one.
                     validator: (value) {
                       if (_isLogin) {
-                        if (value == null || value.isEmpty)
+                        if (value == null || value.isEmpty) {
                           return 'Please enter your password';
+                        }
                       } else {
                         if (value != null &&
                             value.isNotEmpty &&

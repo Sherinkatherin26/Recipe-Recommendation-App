@@ -1,6 +1,7 @@
 import os
 from flask import Flask, request, jsonify
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from flask_cors import CORS
 from dotenv import load_dotenv
 from db import init_db, db
 from models import User, Favorite, Progress, Activity
@@ -13,6 +14,9 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev')
     app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'jwt-secret')
+
+    # Enable CORS for all routes
+    CORS(app, resources={r"/*": {"origins": "*"}})
 
     init_db(app)
 
@@ -95,6 +99,7 @@ def create_app():
     def remove_favorite(rid):
         email = get_jwt_identity()
         Favorite.query.filter_by(user_email=email, recipe_id=rid).delete()
+        # Record activity - activities are NEVER deleted, they persist forever
         db.session.add(Activity(user_email=email, activity=f'removed_favorite:{rid}'))
         db.session.commit()
         return jsonify({'ok': True})
@@ -139,6 +144,74 @@ def create_app():
         Progress.query.filter_by(user_email=email, recipe_id=rid).delete()
         db.session.commit()
         return jsonify({'ok': True})
+
+    # Activities
+    @app.route('/activities', methods=['GET'])
+    @jwt_required()
+    def get_activities():
+        try:
+            email = get_jwt_identity()
+            # Get optional limit parameter (default: return all, max: 1000)
+            limit = request.args.get('limit', type=int)
+            if limit and limit > 1000:
+                limit = 1000
+            if limit and limit < 1:
+                limit = None
+            
+            query = Activity.query.filter_by(user_email=email).order_by(Activity.timestamp.desc())
+            if limit:
+                rows = query.limit(limit).all()
+            else:
+                rows = query.all()
+            
+            out = []
+            for r in rows:
+                out.append({
+                    'email': r.user_email,
+                    'activity': r.activity,
+                    'timestamp': r.timestamp
+                })
+            return jsonify(out)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/activities', methods=['POST'])
+    @jwt_required()
+    def add_activity():
+        try:
+            email = get_jwt_identity()
+            data = request.get_json() or {}
+            activity = data.get('activity')
+            timestamp = data.get('timestamp')
+            if not activity:
+                return jsonify({'error': 'Missing activity'}), 400
+            
+            # Use provided timestamp or current time
+            if not timestamp:
+                timestamp = int(__import__('time').time() * 1000)
+            
+            # Check for duplicate (same user, activity, and timestamp within 1 second)
+            # This prevents exact duplicates while allowing similar activities
+            from sqlalchemy import func
+            existing = Activity.query.filter_by(
+                user_email=email,
+                activity=activity
+            ).filter(
+                func.abs(Activity.timestamp - timestamp) < 1000
+            ).first()
+            
+            if existing:
+                # Duplicate activity, return success without creating new record
+                return jsonify({'ok': True, 'duplicate': True})
+            
+            # Create new activity - these are NEVER deleted, they persist forever
+            act = Activity(user_email=email, activity=activity, timestamp=timestamp)
+            db.session.add(act)
+            db.session.commit()
+            return jsonify({'ok': True})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
 
     return app
 

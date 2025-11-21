@@ -85,9 +85,11 @@ class FavoritesProvider extends ChangeNotifier {
           await LocalDatabase.instance.removeFavorite(recipeId);
         } else {
           await LocalDatabase.instance.removeUserFavorite(userEmail, recipeId);
-        }
-        if (userEmail != null) {
-          await LocalDatabase.instance.addActivity(userEmail, 'removed_favorite:$recipeId');
+          // Backend automatically records this activity, but save locally as backup
+          // (only if backend call failed above)
+          try {
+            await LocalDatabase.instance.addActivity(userEmail, 'removed_favorite:$recipeId');
+          } catch (_) {}
         }
       } catch (_) {
         // ignore DB errors but keep in-memory state updated
@@ -105,9 +107,11 @@ class FavoritesProvider extends ChangeNotifier {
           await LocalDatabase.instance.addFavorite(recipeId);
         } else {
           await LocalDatabase.instance.addUserFavorite(userEmail, recipeId);
-        }
-        if (userEmail != null) {
-          await LocalDatabase.instance.addActivity(userEmail, 'added_favorite:$recipeId');
+          // Backend automatically records this activity, but save locally as backup
+          // (only if backend call failed above)
+          try {
+            await LocalDatabase.instance.addActivity(userEmail, 'added_favorite:$recipeId');
+          } catch (_) {}
         }
       } catch (_) {
         // ignore DB errors

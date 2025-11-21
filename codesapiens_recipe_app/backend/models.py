@@ -36,6 +36,11 @@ class Progress(db.Model):
 class Activity(db.Model):
     __tablename__ = 'activities'
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_email = db.Column(db.String, db.ForeignKey('users.email'))
-    activity = db.Column(db.String)
-    timestamp = db.Column(db.Integer, default=lambda: int(datetime.utcnow().timestamp() * 1000))
+    user_email = db.Column(db.String, db.ForeignKey('users.email', ondelete='CASCADE'), nullable=False, index=True)
+    activity = db.Column(db.String, nullable=False)
+    timestamp = db.Column(db.Integer, default=lambda: int(datetime.utcnow().timestamp() * 1000), nullable=False, index=True)
+    
+    # Add unique constraint to prevent exact duplicates (same user, activity, timestamp)
+    __table_args__ = (
+        db.Index('idx_user_timestamp', 'user_email', 'timestamp'),
+    )

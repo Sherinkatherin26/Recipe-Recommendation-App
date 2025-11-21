@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme.dart';
+import '../../core/api_service.dart';
 import '../recipes/favorites_provider.dart';
 import '../../core/db/sqlite_db.dart';
 import '../auth/auth_provider.dart';
@@ -51,14 +52,21 @@ class _HomePageState extends State<HomePage> {
       setState(() => _filtered = List.of(_all));
       return;
     }
-    // Record search activity for currently authenticated user (if any)
-    try {
-      final userEmail =
-          Provider.of<AuthProvider>(context, listen: false).userEmail;
+    // Record search activity ONLY for authenticated users (not guest mode)
+    // Fire and forget - don't block UI
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.isAuthenticated) {
+      final userEmail = authProvider.userEmail;
       if (userEmail != null && userEmail.isNotEmpty) {
-        LocalDatabase.instance.addActivity(userEmail, 'search:$q');
+        // Try backend first, fallback to local (non-blocking)
+        ApiService.instance.addActivity('search:$q').catchError((_) {
+          // Backend not available, save locally
+          LocalDatabase.instance
+              .addActivity(userEmail, 'search:$q')
+              .catchError((_) {});
+        });
       }
-    } catch (_) {}
+    }
     setState(() {
       _filtered = _all.where((r) {
         final name = r.name.toLowerCase();

@@ -68,6 +68,16 @@ class _AuthenticationWrapperState extends State<AuthenticationWrapper> {
   @override
   void initState() {
     super.initState();
+    // Validate token on startup after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final authProvider = context.read<AuthProvider>();
+      try {
+        await authProvider.validateToken();
+      } catch (_) {
+        // Token validation failed, user will need to login
+      }
+    });
     // Show splash screen for 3 seconds on first load
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) {

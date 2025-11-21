@@ -249,10 +249,12 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _showManageFollowsDialog(BuildContext context, String userEmail) async {
+  Future<void> _showManageFollowsDialog(
+      BuildContext context, String userEmail) async {
     if (userEmail == 'Not logged in') {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please login to manage follows')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please login to manage follows')));
       }
       return;
     }
@@ -282,7 +284,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Align(alignment: Alignment.centerLeft, child: Text('Currently following:')),
+              const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Currently following:')),
               const SizedBox(height: 8),
               SizedBox(
                 height: 150,
@@ -297,20 +301,27 @@ class _ProfilePageState extends State<ProfilePage> {
                             title: Text(e),
                             trailing: TextButton(
                               onPressed: () async {
-                                          await LocalDatabase.instance.removeFollower(userEmail, e);
-                                          // After unfollowing, reload/sync favorites and activities
-                                          try {
-                                            await favProvider.loadFavoritesForUser(userEmail);
-                                            await favProvider.syncFavoritesFromFollowing(userEmail);
-                                          } catch (_) {}
-                                          try {
-                                            final activities = context.read<ActivitiesProvider>();
-                                            await activities.loadActivitiesForUser(userEmail);
-                                            await activities.syncActivitiesFromFollowing(userEmail);
-                                          } catch (_) {}
-                                          setState(() => following.removeAt(i));
+                                await LocalDatabase.instance
+                                    .removeFollower(userEmail, e);
+                                // After unfollowing, reload/sync favorites and activities
+                                try {
+                                  await favProvider
+                                      .loadFavoritesForUser(userEmail);
+                                  await favProvider
+                                      .syncFavoritesFromFollowing(userEmail);
+                                } catch (_) {}
+                                try {
+                                  final activities =
+                                      context.read<ActivitiesProvider>();
+                                  await activities
+                                      .loadActivitiesForUser(userEmail);
+                                  await activities
+                                      .syncActivitiesFromFollowing(userEmail);
+                                } catch (_) {}
+                                setState(() => following.removeAt(i));
                               },
-                              child: const Text('Unfollow', style: TextStyle(color: Colors.red)),
+                              child: const Text('Unfollow',
+                                  style: TextStyle(color: Colors.red)),
                             ),
                           );
                         },
@@ -319,12 +330,15 @@ class _ProfilePageState extends State<ProfilePage> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close')),
             ElevatedButton(
               onPressed: () async {
                 final emailToFollow = controller.text.trim();
                 if (emailToFollow.isEmpty) return;
-                await LocalDatabase.instance.addFollower(userEmail, emailToFollow);
+                await LocalDatabase.instance
+                    .addFollower(userEmail, emailToFollow);
                 // After following, sync favorites
                 await favProvider.syncFavoritesFromFollowing(userEmail);
                 try {
@@ -333,7 +347,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   await activities.syncActivitiesFromFollowing(userEmail);
                 } catch (_) {}
                 setState(() {
-                  if (!following.contains(emailToFollow)) following.add(emailToFollow);
+                  if (!following.contains(emailToFollow))
+                    following.add(emailToFollow);
                 });
                 controller.clear();
               },
@@ -397,6 +412,18 @@ class _ProfilePageState extends State<ProfilePage> {
     );
 
     if (confirmed == true && context.mounted) {
+      final userEmail = authProvider.userEmail;
+
+      // Sync activities to backend before logout
+      if (userEmail != null) {
+        try {
+          final activities = context.read<ActivitiesProvider>();
+          await activities.syncLocalActivitiesToBackend(userEmail);
+        } catch (_) {
+          // Continue with logout even if sync fails
+        }
+      }
+
       await authProvider.logout();
       // Clear user-scoped providers so UI resets between users
       try {

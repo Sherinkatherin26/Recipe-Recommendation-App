@@ -315,6 +315,16 @@ class LocalDatabase {
     }
   }
 
+  Future<bool> userExists(String email) async {
+    final db = await database;
+    final result = await db.query(
+      'users',
+      where: 'email = ?',
+      whereArgs: [email],
+    );
+    return result.isNotEmpty;
+  }
+
   Future<Map<String, String>?> getUserByEmail(String email) async {
     final normalized = _normalizeEmail(email);
     if (kIsWeb) {
