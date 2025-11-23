@@ -58,63 +58,8 @@ class LocalDatabase {
             debugPrint('upgrade error v2->v3: $e');
           }
         }
-
-        // Add missing tables creation for upgrades from older versions
-        if (oldV < 4) {
-          try {
-            await db.execute('''
-              CREATE TABLE IF NOT EXISTS favorites(
-                id TEXT PRIMARY KEY
-              )
-            ''');
-            await db.execute('''
-              CREATE TABLE IF NOT EXISTS user_recipes(
-                id TEXT PRIMARY KEY,
-                email TEXT,
-                name TEXT,
-                image TEXT,
-                description TEXT,
-                timestamp INTEGER
-              )
-            ''');
-            await db.execute('''
-              CREATE TABLE IF NOT EXISTS user_favorites(
-                email TEXT,
-                id TEXT,
-                PRIMARY KEY(email, id)
-              )
-            ''');
-            await db.execute('''
-              CREATE TABLE IF NOT EXISTS followers(
-                follower TEXT,
-                followee TEXT,
-                PRIMARY KEY(follower, followee)
-              )
-            ''');
-            await db.execute('''
-              CREATE TABLE IF NOT EXISTS user_progress(
-                email TEXT,
-                id TEXT,
-                status TEXT,
-                position INTEGER,
-                timestamp INTEGER,
-                PRIMARY KEY(email, id)
-              )
-            ''');
-          } catch (e) {
-            debugPrint('upgrade error v3->v4 (create missing tables): $e');
-          }
-        }
       },
     );
-  }
-
-  /// Reset DB by deleting the existing file. Next time DB opens, onCreate runs again.
-  Future<void> resetDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'codesapiens_app.db');
-    await deleteDatabase(path);
-    _db = null;
   }
 
   Future _createDB(Database db, int version) async {
