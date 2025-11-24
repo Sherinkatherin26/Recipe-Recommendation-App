@@ -18,6 +18,16 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+    bool _firstBuild = true;
+    @override
+    void didChangeDependencies() {
+      super.didChangeDependencies();
+      // Reload stats every time dependencies change (e.g., after navigation)
+      if (!_firstBuild) {
+        _loadStats();
+      }
+      _firstBuild = false;
+    }
   String? _imageUrl;
   bool _loading = true;
 

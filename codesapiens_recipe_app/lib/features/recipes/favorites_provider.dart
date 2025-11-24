@@ -4,18 +4,21 @@ import '../../core/db/sqlite_db.dart';
 class FavoritesProvider extends ChangeNotifier {
   final Set<String> _favoriteIds = {};
 
+
   FavoritesProvider() {
-    _loadDeviceFavorites();
+    loadDeviceFavorites();
   }
 
-  /// Load device-level favorites ONCE when not logged in
-  Future<void> _loadDeviceFavorites() async {
+
+  /// Public: Load device-level favorites (for guest mode)
+  Future<void> loadDeviceFavorites() async {
     try {
+      _favoriteIds.clear();
       final ids = await LocalDatabase.instance.getFavorites();
       _favoriteIds.addAll(ids);
       notifyListeners();
     } catch (e) {
-      debugPrint('FavoritesProvider._loadDeviceFavorites error: $e');
+      debugPrint('FavoritesProvider.loadDeviceFavorites error: $e');
     }
   }
 
