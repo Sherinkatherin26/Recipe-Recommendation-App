@@ -52,10 +52,11 @@ Simple icon-based navigation
 Designed for mobile usability and readability
 
 ## 🛠️ Tech Stack
-Design Tool: Figma
-Frontend: Flutter 
-Backend: SQLite
-Version Control: Git, GitHub
+- **Design Tool:** Figma
+- **Frontend:** React
+- **Backend:** Firebase
+- **Database:** MongoDB
+- **Version Control:** Git, GitHub
 
 # 👩‍💻 Author
 
