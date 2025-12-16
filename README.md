@@ -57,13 +57,13 @@ Frontend: Flutter
 Backend: SQLite
 Version Control: Git, GitHub
 
-#👩‍💻 Author
+# 👩‍💻 Author
 
 Sherin Katherina D
 Feminna G
 Shasmeen Syed 
 
-##Flavourly – Recipe Recommendation App
+## Flavourly – Recipe Recommendation App
 Designed and developed with a focus on clean UI and user experience.
 
 Discover recipes. Save favourites. Cook with confidence. 🍳
