@@ -71,9 +71,9 @@ The application follows a structured and user-friendly screen flow:
 ## 🛠️ Tech Stack
 
 - **Design Tool:** Figma
-- **Frontend:** React
-- **Backend:** Firebase
-- **Database:** MongoDB
+- **Frontend:** Flutter
+- **Backend:** Flask
+- **Database:** SQLite
 - **Version Control:** Git, GitHub
 
 ---
