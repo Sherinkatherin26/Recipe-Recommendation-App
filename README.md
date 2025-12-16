@@ -1,6 +1,6 @@
 # Recipe-Recommendation-App
 # Flavourly 🍽️ – Recipe Recommendation App
-Flavourly is a mobile recipe recommendation application designed with a clean, minimal, and visually rich interface. The app helps users discover, explore, save, and view detailed recipes through an intuitive flow inspired by real cooking habits.
+Flavourly is our very first mobile recipe recommendation application, designed with a clean, minimal, and visually rich interface. The app helps users discover, explore, save, and view detailed recipes through an intuitive flow inspired by real cooking habits.
 
 The UI focuses on food imagery, readability, and smooth navigation, making the experience simple and engaging for everyday users.
 
